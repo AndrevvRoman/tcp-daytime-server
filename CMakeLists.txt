@@ -19,7 +19,13 @@ file(GLOB SOURCES
 include(CTest)
 enable_testing()
 
-add_executable(tcp-datetime-server ${HEADERS} ${SOURCES})
+add_executable(${PROJECT_NAME} ${HEADERS} ${SOURCES})
+
+set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
+
+# target_include_directories(${PROJECT_NAME} PUBLIC
+#     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/libs/date>
+# )
 
 target_link_libraries(${PROJECT_NAME} 
     ${Boost_LIBRARIES}
