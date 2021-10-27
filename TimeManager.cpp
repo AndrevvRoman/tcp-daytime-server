@@ -9,8 +9,19 @@ void TimeManager::start(std::shared_ptr<IGetTimeEndpoint> getTimeEndpoint,std::s
     {
         auto timeShiftResult = m_getTimeEndpoint->getNowInTimezone(message);
         if (timeShiftResult.second)
+        {
             m_networkEndpoint->scheduleWrite(id,timeShiftResult.first);
+        }
         else
-            m_networkEndpoint->scheduleWrite(id,"I don't know inputed timezone");
+        {
+            std::string answer = "I don't know inputed timezone\n";
+            answer += "I know these timezones:\n";
+            auto zones = m_getTimeEndpoint->getKnownTimeZones();
+            for (const auto & zone : zones)
+            {
+                answer += zone.first + ": UTC " + std::to_string(zone.second) + '\n';
+            }
+            m_networkEndpoint->scheduleWrite(id,answer);
+        }
     });
 }
