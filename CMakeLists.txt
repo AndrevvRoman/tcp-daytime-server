@@ -20,24 +20,25 @@ file(GLOB SOURCES
     "app/sources/*.cpp"
 )
 
-include(CTest)
-enable_testing()
 
 add_executable(${PROJECT_NAME} ${HEADERS} ${SOURCES})
 
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
 
 target_include_directories(${PROJECT_NAME} PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/app/include/endpoints>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/app/include/managment>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/app/include/misc>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/app>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/app/include/endpoints>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/app/include/managment>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/app/include/misc>
+$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/app>
 )
 
 target_link_libraries(${PROJECT_NAME} 
-    ${Boost_LIBRARIES}
-    pthread)
+${Boost_LIBRARIES}
+pthread)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
 include(CPack)
+
+include(CTest)
+enable_testing()
