@@ -4,25 +4,31 @@
 #include <ctime>
 #include <chrono>
 #include <algorithm>
+#include <iostream>
 
 class ChronoTimeEndpoint::pImpl
 {
 public:
     pImpl(
-        const std::string &format, std::function<time_t()> timeGetter = []()
-                                   { return std::time(nullptr); })
+        const std::string& format, std::function<time_t()> timeGetter = []()
+        { return std::time(nullptr); })
         : m_format(format),
-          m_timeGetter(timeGetter)
+        m_timeGetter(timeGetter)
     {
     }
 
-    std::pair<std::string, bool> getNowInTimezone(const std::string &timeZone)
+    std::pair<std::string, bool> getNowInTimezone(std::string timeZone)
     {
         std::time_t now = m_timeGetter();
         std::time_t gmtNow = std::mktime(std::gmtime(&now));
         auto chronoTimeInGmt = std::chrono::system_clock::from_time_t(gmtNow);
-
+        timeZone.erase(std::remove_if(timeZone.begin(), timeZone.end(),
+            [](auto const& c) -> bool 
+            { 
+                return !std::isalnum(c); 
+            }), timeZone.end());
         std::string timeZoneUpper = _toUpper(timeZone);
+        std::cout << "Trying " << timeZoneUpper << std::endl;
         try
         {
             auto timeInTargetTimeZone = chronoTimeInGmt + std::chrono::hours(m_timeShiftsMap.at(timeZoneUpper));
@@ -30,19 +36,23 @@ public:
             std::tm targetTimeStruct = *std::localtime(&targetTime);
             targetTimeStruct.tm_zone = timeZoneUpper.c_str();
             std::stringstream ss;
-            ss << std::put_time(&targetTimeStruct, m_format.c_str());
-            return {ss.str(), true};
+            ss << std::put_time(&targetTimeStruct, m_format.c_str()) << '\n';
+            return { ss.str(), true };
         }
-        catch (const std::out_of_range &e)
+        catch (const std::out_of_range& e)
         {
-            return {"", false};
+            std::cout << "Not found " << timeZoneUpper << std::endl;
+            return { "", false };
         }
     }
-    void setFormat(const std::string &format)
+    void setFormat(const std::string& format)
     {
         m_format = format;
     }
-
+    std::map<std::string,int> getKnownTimeZones()
+    {
+        return m_timeShiftsMap;
+    }
 private:
     std::function<time_t()> m_timeGetter;
     std::string _toUpper(std::string str)
@@ -229,20 +239,20 @@ private:
         {"TAHT", -10},
         {"NUT", -11},
         {"SST", -11},
-        {"BIT", -12}};
+        {"BIT", -12} };
 };
 
 ChronoTimeEndpoint::ChronoTimeEndpoint(
-    const std::string &format, std::function<time_t()> timeGetter)
-    : m_pImpl(new pImpl(format,timeGetter))
+    const std::string& format, std::function<time_t()> timeGetter)
+    : m_pImpl(new pImpl(format, timeGetter))
 {
 }
 
-std::pair<std::string, bool> ChronoTimeEndpoint::getNowInTimezone(const std::string &timeZone)
+std::pair<std::string, bool> ChronoTimeEndpoint::getNowInTimezone(std::string timeZone)
 {
     return m_pImpl->getNowInTimezone(timeZone);
 }
-void ChronoTimeEndpoint::setFormat(const std::string &format)
+void ChronoTimeEndpoint::setFormat(const std::string& format)
 {
     m_pImpl->setFormat(format);
 }
@@ -253,4 +263,9 @@ ChronoTimeEndpoint::~ChronoTimeEndpoint()
     {
         delete m_pImpl;
     }
+}
+
+std::map<std::string,int> ChronoTimeEndpoint::getKnownTimeZones()
+{
+    return m_pImpl->getKnownTimeZones();
 }
