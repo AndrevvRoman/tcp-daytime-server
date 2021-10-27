@@ -20,7 +20,6 @@ file(GLOB SOURCES
     "app/sources/*.cpp"
 )
 
-
 include(CTest)
 enable_testing()
 
