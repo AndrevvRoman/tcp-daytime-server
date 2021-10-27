@@ -22,43 +22,38 @@ namespace BoostTcpEndpoint
     class TcpConnection : public std::enable_shared_from_this<TcpConnection>
     {
     public:
-        TcpConnection(boost::asio::io_context &io_context, int updateIntervalMiliSec = 500) : m_socket(io_context),
-                                                                                              m_workingInterval(updateIntervalMiliSec),
-                                                                                              m_timer(io_context, m_workingInterval)
+        TcpConnection(boost::asio::io_context& io_context, uint32_t id) : m_socket(io_context), m_id(id)
         {
         }
-
-        static std::shared_ptr<TcpConnection> create(boost::asio::io_context &io_context)
+        ~TcpConnection()
         {
-            return std::make_shared<TcpConnection>(io_context);
+            std::cout << "Closing socket in destructor" << std::endl;
+            m_socket.close();
         }
-
-        tcp::socket &socket()
+        static std::shared_ptr<TcpConnection> create(boost::asio::io_context& io_context, uint32_t id)
+        {
+            return std::make_shared<TcpConnection>(io_context, id);
+        }
+        tcp::socket& socket()
         {
             return m_socket;
         }
-
         void start()
         {
             _readTcpSocket();
-            m_timer.async_wait(boost::bind(&TcpConnection::_bufferUpdateHandler, this));
         }
-
-        size_t subscribeToRead(const std::function<void(const std::string)> handler)
+        size_t subscribeToRead(const std::function<void(uint32_t id, const std::string)> handler)
         {
             return m_readHandlers.add(handler);
         }
-
         void scheduleWrite(const std::string message)
         {
             boost::asio::async_write(m_socket, boost::asio::buffer(message),
-                                     boost::bind(&TcpConnection::_writeFinishedHandler, shared_from_this(),
-                                                 boost::asio::placeholders::error,
-                                                 boost::asio::placeholders::bytes_transferred));
+                boost::bind(&TcpConnection::_writeFinishedHandler, shared_from_this(),
+                    boost::asio::placeholders::error,
+                    boost::asio::placeholders::bytes_transferred));
         }
-
-    private:
-        void _bufferUpdateHandler()
+        void pullBuffer()
         {
             if (m_socket.available() > 0)
             {
@@ -68,112 +63,135 @@ namespace BoostTcpEndpoint
             if (s.size() != 0)
             {
                 std::cout << s;
-                m_readHandlers.handle(s);
+                m_readHandlers.handle(m_id, s);
             }
-            m_timer.expires_at(m_timer.expires_at() + m_workingInterval);
-            m_timer.async_wait(boost::bind(&TcpConnection::_bufferUpdateHandler, this));
         }
-        void _writeFinishedHandler(const boost::system::error_code &, size_t bytes)
+        std::atomic<bool> isAlive()
+        {
+            return m_isAlive.load();
+        }
+        uint32_t id()
+        {
+            return m_id;
+        }
+    private:
+        void _writeFinishedHandler(const boost::system::error_code&, size_t bytes)
         {
             std::cout << "Bytes written: " << bytes << std::endl;
             //добавить std future для возможности получения результата
         }
         void _readTcpSocket()
         {
-            std::lock_guard<decltype(m_socketMutex)> lock(m_socketMutex);
-
             boost::asio::async_read(m_socket, m_buffer,
-                                    [this](boost::system::error_code ec, std::size_t sizeOfPack)
-                                    {
-                                        std::cout << "EOF. End of reading" << std::endl;
-                                    });
+                [this](boost::system::error_code ec, std::size_t sizeOfPack)
+                {
+                    std::cout << "EOF. End of reading" << std::endl;
+                    m_isAlive.store(false);
+                });
         }
         boost::asio::streambuf m_buffer;
         tcp::socket m_socket;
-        std::mutex m_socketMutex;
-        boost::posix_time::millisec m_workingInterval;
-        boost::asio::deadline_timer m_timer;
-        Handlers<std::function<void(const std::string &)>> m_readHandlers;
+        Handlers<std::function<void(uint32_t, const std::string&)>> m_readHandlers;
+        std::atomic<bool> m_isAlive = true;
+        const uint32_t m_id;
     };
 
     class TcpServer
     {
     public:
-        TcpServer(const uint16_t port)
-            : m_acceptor(m_ioContext, tcp::endpoint(tcp::v4(), port))
+        TcpServer(const uint16_t port, int updateIntervalMiliSec = 500)
+            : m_acceptor(m_ioContext, tcp::endpoint(tcp::v4(), port)),
+            m_workingInterval(updateIntervalMiliSec),
+            m_timer(m_ioContext, m_workingInterval)
         {
         }
-
         void start()
         {
             startAcceptingConnections();
             std::thread tr([this]()
-                           { m_ioContext.run(); });
+                { m_ioContext.run(); });
             tr.detach();
         }
-
         void stop()
         {
+            m_acceptor.close();
             m_ioContext.stop();
         }
-
         void startAcceptingConnections()
         {
-            std::shared_ptr<TcpConnection> newConnection = TcpConnection::create(m_ioContext);
-            m_acceptor.async_accept(newConnection->socket(), boost::bind(&TcpServer::_handleAccept, this, newConnection, boost::asio::placeholders::error));
+            std::shared_ptr<TcpConnection> newConnection = TcpConnection::create(m_ioContext, m_lastId);
+            m_lastId++;
+            m_acceptor.async_accept(newConnection->socket(), boost::bind(&TcpServer::_handleAcceptConnection, this, newConnection, boost::asio::placeholders::error));
         }
-
-        void stopAcceptingConnections()
+        size_t subscribeToNewMessage(std::function<void(const uint16_t clientId, const std::string& message)> handler)
         {
-            m_acceptor.close();
+            return m_readHandlers.add(handler);
         }
-
-        void disconnectAll()
+        void writeMessageToClinet(uint16_t clientId, const std::string& message)
         {
+            try
             {
-                std::lock_guard<decltype(m_connectionsVecMutex)> lock(m_connectionsVecMutex);
-                m_connections.clear();
+                m_connections.at(clientId)->scheduleWrite(message);
             }
-        }
-
-        void disconnect(const int i)
-        {
+            catch (const std::out_of_range e)
             {
-                std::lock_guard<decltype(m_connectionsVecMutex)> lock(m_connectionsVecMutex);
-                m_connections.erase(m_connections.begin() + i);
+                //pass
             }
-        }
 
-        size_t subscribeToNewConnection(const std::function<void(std::shared_ptr<TcpConnection>)> handler)
-        {
-            return m_connectionHandlers.add(handler);
         }
-
     private:
-        void _handleAccept(std::shared_ptr<TcpConnection> newConnection, const boost::system::error_code &error)
+        void _handleAcceptConnection(std::shared_ptr<TcpConnection> newConnection, const boost::system::error_code& error)
         {
             std::cout << "New connecton!" << std::endl;
             if (!error)
             {
                 {
-                    std::lock_guard<decltype(m_connectionsVecMutex)> lock(m_connectionsVecMutex);
-                    m_connections.push_back(newConnection);
-                }
-
-                {
-                    std::lock_guard<decltype(m_connectionsHandlersMutex)> lock(m_connectionsHandlersMutex);
+                    std::lock_guard<decltype(m_connectionsMapMutex)> lock(m_connectionsMapMutex);
+                    m_connections[newConnection->id()] = newConnection;
+                    m_connections[newConnection->id()]->subscribeToRead([this](uint32_t ConnId, const std::string msg)
+                        {
+                            m_readHandlers.handle(ConnId, msg);
+                        });
                     newConnection->start();
-                    m_connectionHandlers.handle(m_connections[m_connections.size() - 1]);
+                    m_timer.expires_at(m_timer.expiry() + m_workingInterval);
+                    m_timer.async_wait(boost::bind(&TcpServer::_updateConnections, this));
                 }
             }
             startAcceptingConnections();
         }
+        void _updateConnections()
+        {
+            if (m_connections.size() > 0)
+            {
+                auto it = m_connections.begin();
+                auto end = m_connections.end();
+                for (; it != end; )
+                {
+                    if (it->second->isAlive() == false)
+                    {
+                        it = m_connections.erase(it);
+                    }
+                    else 
+                    {
+                        std::lock_guard<decltype(m_connectionsMapMutex)> lock(m_connectionsMapMutex);
+                        it->second->pullBuffer();
+                        ++it;
+                    }
+                }
+                m_timer.expires_at(m_timer.expiry() + m_workingInterval);
+                m_timer.async_wait(boost::bind(&TcpServer::_updateConnections, this));
+            }
+        }
 
         boost::asio::io_context m_ioContext;
+        boost::asio::chrono::milliseconds m_workingInterval;
+        boost::asio::steady_timer m_timer;
         tcp::acceptor m_acceptor;
-        std::mutex m_connectionsVecMutex;
-        std::vector<std::shared_ptr<TcpConnection>> m_connections;
-        std::mutex m_connectionsHandlersMutex;
-        Handlers<std::function<void(const std::shared_ptr<TcpConnection> &)>> m_connectionHandlers;
+
+        std::mutex m_connectionsMapMutex;
+        std::map<uint32_t, std::shared_ptr<TcpConnection>> m_connections;
+        uint32_t m_lastId = 1;
+
+        Handlers<std::function<void(const uint16_t id, const std::string&)>> m_readHandlers;
     };
 }

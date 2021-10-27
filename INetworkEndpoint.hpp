@@ -8,6 +8,5 @@ public:
     virtual void stop() = 0;
     virtual void subscribeToRead(const std::function<void(const uint16_t idConnection, const std::string & message)> handler) = 0;
     virtual void scheduleWrite(const uint16_t idConnection, const std::string & message) = 0;
-    virtual void subscribeToNewConnection(const std::function<void(const uint16_t idConnection)> handler) = 0;
     ~INetworkEndpoint() = default;
 };

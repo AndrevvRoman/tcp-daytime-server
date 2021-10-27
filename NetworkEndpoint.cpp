@@ -1,8 +1,5 @@
-#pragma once
 #include "NetworkEndpoint.hpp"
 #include "BoostTcpEndpoint.hpp"
-
-
 
 class NetworkEndpoint::pImpl
 {
@@ -10,28 +7,41 @@ public:
     pImpl(uint16_t port) : m_server(port)
     {
     }
+    void start()
+    {
+        m_server.start();
+    }
+    void stop()
+    {
+        m_server.stop();
+    }
     void subscribeToRead(const std::function<void(const uint16_t id,const std::string &)> handler)
     {
-        // тут по id привязывать handler для чтения и connection через мапу
+        m_server.subscribeToNewMessage(handler);
     }
     void scheduleWrite(const uint16_t id, const std::string & message)
     {
-        // тут по id привязывать handler для записи и connection через мапу
-    }
-    void subscribeToNewConnection(const std::function<void(const uint16_t idConnection)> newConnectionHanlder)
-    {
-        m_server.subscribeToNewConnection([this,newConnectionHanlder](std::shared_ptr<BoostTcpEndpoint::TcpConnection> newConnection) 
-        {
-            m_connections[m_lastHandlerId] = newConnection;
-            newConnectionHanlder(m_lastHandlerId);
-            m_lastHandlerId++;
-        });
+        m_server.writeMessageToClinet(id,message);
     }
 private:
     BoostTcpEndpoint::TcpServer m_server;
-    std::map<size_t,std::shared_ptr<BoostTcpEndpoint::TcpConnection>> m_connections;
-    size_t m_lastHandlerId = 1;
 };
+
+NetworkEndpoint::NetworkEndpoint(const uint16_t port)
+{
+    m_pImpl = new pImpl(port);
+}
+
+
+void NetworkEndpoint::start()
+{
+    m_pImpl->start();
+}
+
+void NetworkEndpoint::stop()
+{
+    m_pImpl->stop();
+}
 
 void NetworkEndpoint::subscribeToRead(const std::function<void(const uint16_t id,const std::string &)> handler)
 {
@@ -41,9 +51,4 @@ void NetworkEndpoint::subscribeToRead(const std::function<void(const uint16_t id
 void NetworkEndpoint::scheduleWrite(const uint16_t id,const std::string & message)
 {
     m_pImpl->scheduleWrite(id, message);
-}
-
-void NetworkEndpoint::subscribeToNewConnection(const std::function<void(const uint16_t idConnection)> handler)
-{
-    m_pImpl->subscribeToNewConnection(handler);
 }
