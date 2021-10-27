@@ -60,7 +60,7 @@ private:
         std::transform(str.begin(), str.end(), str.begin(), toupper);
         return str;
     }
-    std::string m_format = "%a %b %d %T %Z %Y";
+    std::string m_format;
     const std::map<std::string, int> m_timeShiftsMap{
         {"GMT", 0},
         {"IBST", 0},
