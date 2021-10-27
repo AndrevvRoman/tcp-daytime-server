@@ -19,25 +19,16 @@ using boost::asio::ip::tcp;
 
 namespace BoostTcpEndpoint
 {
-    class IConnection
+    class TcpConnection : public std::enable_shared_from_this<TcpConnection>
     {
     public:
-        virtual size_t subscribeToRead(const std::function<void(const std::string)> handler) = 0;
-        virtual void scheduleWrite(const std::string message) = 0;
-        ~IConnection() = default;
-    };
-
-    class TcpConnection : public IConnection, public std::enable_shared_from_this<TcpConnection>
-    {
-    public:
-        typedef std::shared_ptr<TcpConnection> pointer;
         TcpConnection(boost::asio::io_context &io_context, int updateIntervalMiliSec = 500) : m_socket(io_context),
                                                                                               m_workingInterval(updateIntervalMiliSec),
                                                                                               m_timer(io_context, m_workingInterval)
         {
         }
 
-        static pointer create(boost::asio::io_context &io_context)
+        static std::shared_ptr<TcpConnection> create(boost::asio::io_context &io_context)
         {
             return std::make_shared<TcpConnection>(io_context);
         }
@@ -53,12 +44,12 @@ namespace BoostTcpEndpoint
             m_timer.async_wait(boost::bind(&TcpConnection::_bufferUpdateHandler, this));
         }
 
-        size_t subscribeToRead(const std::function<void(const std::string)> handler) override
+        size_t subscribeToRead(const std::function<void(const std::string)> handler)
         {
             return m_readHandlers.add(handler);
         }
 
-        void scheduleWrite(const std::string message) override
+        void scheduleWrite(const std::string message)
         {
             boost::asio::async_write(m_socket, boost::asio::buffer(message),
                                      boost::bind(&TcpConnection::_writeFinishedHandler, shared_from_this(),
@@ -121,9 +112,14 @@ namespace BoostTcpEndpoint
             tr.detach();
         }
 
+        void stop()
+        {
+            m_ioContext.stop();
+        }
+
         void startAcceptingConnections()
         {
-            TcpConnection::pointer newConnection = TcpConnection::create(m_ioContext);
+            std::shared_ptr<TcpConnection> newConnection = TcpConnection::create(m_ioContext);
             m_acceptor.async_accept(newConnection->socket(), boost::bind(&TcpServer::_handleAccept, this, newConnection, boost::asio::placeholders::error));
         }
 
@@ -148,13 +144,13 @@ namespace BoostTcpEndpoint
             }
         }
 
-        size_t subscribeToNewConnection(const std::function<void(std::shared_ptr<IConnection>)> handler)
+        size_t subscribeToNewConnection(const std::function<void(std::shared_ptr<TcpConnection>)> handler)
         {
             return m_connectionHandlers.add(handler);
         }
 
     private:
-        void _handleAccept(TcpConnection::pointer newConnection, const boost::system::error_code &error)
+        void _handleAccept(std::shared_ptr<TcpConnection> newConnection, const boost::system::error_code &error)
         {
             std::cout << "New connecton!" << std::endl;
             if (!error)
@@ -176,8 +172,8 @@ namespace BoostTcpEndpoint
         boost::asio::io_context m_ioContext;
         tcp::acceptor m_acceptor;
         std::mutex m_connectionsVecMutex;
-        std::vector<TcpConnection::pointer> m_connections;
+        std::vector<std::shared_ptr<TcpConnection>> m_connections;
         std::mutex m_connectionsHandlersMutex;
-        Handlers<std::function<void(const std::shared_ptr<IConnection> &)>> m_connectionHandlers;
+        Handlers<std::function<void(const std::shared_ptr<TcpConnection> &)>> m_connectionHandlers;
     };
 }
