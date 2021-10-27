@@ -10,6 +10,7 @@ void TimeManager::start(std::shared_ptr<IGetTimeEndpoint> getTimeEndpoint,std::s
         auto timeShiftResult = m_getTimeEndpoint->getNowInTimezone(message);
         if (timeShiftResult.second)
         {
+            timeShiftResult.first += '\n';
             m_networkEndpoint->scheduleWrite(id,timeShiftResult.first);
         }
         else

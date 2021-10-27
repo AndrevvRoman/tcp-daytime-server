@@ -36,7 +36,7 @@ public:
             std::tm targetTimeStruct = *std::localtime(&targetTime);
             targetTimeStruct.tm_zone = timeZoneUpper.c_str();
             std::stringstream ss;
-            ss << std::put_time(&targetTimeStruct, m_format.c_str()) << '\n';
+            ss << std::put_time(&targetTimeStruct, m_format.c_str());
             return { ss.str(), true };
         }
         catch (const std::out_of_range& e)
@@ -138,7 +138,6 @@ private:
         {"IRKT", 8},
         {"MST", 8},
         {"MYT", 8},
-        {"PST", 8},
         {"SGT", 8},
         {"SST", 8},
         {"ULAT", 8},
