@@ -102,11 +102,13 @@ namespace BoostTcpEndpoint
         TcpServer(const uint16_t port, int updateIntervalMiliSec = 500)
             : m_acceptor(m_ioContext, tcp::endpoint(tcp::v4(), port)),
             m_workingInterval(updateIntervalMiliSec),
-            m_timer(m_ioContext, m_workingInterval)
+            m_timer(m_ioContext, m_workingInterval),
+            m_port(port)
         {
         }
         void start()
         {
+            std::cout << "Starting server at " << m_port << std::endl;
             startAcceptingConnections();
             std::thread tr([this]()
                 { m_ioContext.run(); });
@@ -191,7 +193,9 @@ namespace BoostTcpEndpoint
         std::mutex m_connectionsMapMutex;
         std::map<uint32_t, std::shared_ptr<TcpConnection>> m_connections;
         uint32_t m_lastId = 1;
-
+        
         Handlers<std::function<void(const uint16_t id, const std::string&)>> m_readHandlers;
+
+        uint16_t m_port;
     };
 }
