@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.0.0)
 project(tcp-datetime-server VERSION 0.1.0)
 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" -Wall -Wextra -Wpedantic -Werror)
+
 SET(Boost_USE_STATIC_LIBS ON)
 # sudo apt install libboost-system1.71-dev
 find_package(Boost 1.71 COMPONENTS system)
