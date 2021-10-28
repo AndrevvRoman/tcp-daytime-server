@@ -5,6 +5,7 @@ file(GLOB SOURCES
     "libs/catch/*.hpp"
     "libs/catch/*.cpp"
     "sources/*.cpp"
+    "sources/mocks/*.hpp"
     "*.cpp"
 )
 
