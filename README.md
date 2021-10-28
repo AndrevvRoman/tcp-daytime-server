@@ -9,6 +9,10 @@ To build the project, run
     $ cmake ..
     $ make
 
+You will need boost 1.71. To install run
+
+    $ sudo apt install libboost-system1.71-dev
+
 ## Testing
 To run tests
 
