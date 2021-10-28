@@ -4,13 +4,14 @@ void TimeManager::start(std::shared_ptr<IGetTimeEndpoint> getTimeEndpoint,std::s
 {
     m_getTimeEndpoint = getTimeEndpoint;
     m_networkEndpoint = networkEndpoint;
-
-    m_networkEndpoint->subscribeToRead([this](const uint16_t id,const std::string & message)
+    //Подписываемся на трафик с любого подключения
+    m_networkEndpoint->subscribeToRead([this](const uint16_t id,const std::string message)
     {
         auto timeShiftResult = m_getTimeEndpoint->getNowInTimezone(message);
         if (timeShiftResult.second)
         {
             timeShiftResult.first += '\n';
+            //запланировать запись ответа
             m_networkEndpoint->scheduleWrite(id,timeShiftResult.first);
         }
         else

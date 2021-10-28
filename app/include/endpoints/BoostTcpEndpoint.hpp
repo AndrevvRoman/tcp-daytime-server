@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <future>
 
 #include <boost/bind/bind.hpp>
 #include <boost/shared_ptr.hpp>
@@ -40,6 +41,7 @@ namespace BoostTcpEndpoint
         }
         void start()
         {
+            //Начинаем асинхронное чтение в буфер
             _readTcpSocket();
         }
         size_t subscribeToRead(const std::function<void(uint32_t id, const std::string)> handler)
@@ -62,8 +64,8 @@ namespace BoostTcpEndpoint
             std::string s((std::istreambuf_iterator<char>(&m_buffer)), std::istreambuf_iterator<char>());
             if (s.size() != 0)
             {
-                std::cout << s;
-                m_readHandlers.handle(m_id, s);
+                std::cout << s << std::endl;
+                std::async(std::launch::async, &TcpConnection::_executeHandlers, this, m_id, s);
             }
         }
         std::atomic<bool> isAlive()
@@ -86,8 +88,14 @@ namespace BoostTcpEndpoint
                 [this](boost::system::error_code ec, std::size_t sizeOfPack)
                 {
                     std::cout << "EOF. End of reading" << std::endl;
+                    //Показываем, что соединение можно закрыть
                     m_isAlive.store(false);
                 });
+        }
+
+        void _executeHandlers(uint16_t id, std::string msg)
+        {
+            m_readHandlers.handle(m_id, msg);
         }
         boost::asio::streambuf m_buffer;
         tcp::socket m_socket;
@@ -99,7 +107,7 @@ namespace BoostTcpEndpoint
     class TcpServer
     {
     public:
-        TcpServer(const uint16_t port, int updateIntervalMiliSec = 500)
+        TcpServer(const uint16_t port, int updateIntervalMiliSec = 150)
             : m_acceptor(m_ioContext, tcp::endpoint(tcp::v4(), port)),
             m_workingInterval(updateIntervalMiliSec),
             m_timer(m_ioContext, m_workingInterval),
@@ -150,9 +158,10 @@ namespace BoostTcpEndpoint
                 {
                     std::lock_guard<decltype(m_connectionsMapMutex)> lock(m_connectionsMapMutex);
                     m_connections[newConnection->id()] = newConnection;
-                    m_connections[newConnection->id()]->subscribeToRead([this](uint32_t ConnId, const std::string msg)
+                    m_connections[newConnection->id()]->subscribeToRead([this](uint32_t connId, const std::string msg)
                         {
-                            m_readHandlers.handle(ConnId, msg);
+                            //Ставим в обработчик чтения буфера исполнение пользователских обработчиков, в который отправляем id соединения
+                            m_readHandlers.handle(connId, msg);
                         });
                     newConnection->start();
                     m_timer.expires_at(m_timer.expiry() + m_workingInterval);
@@ -163,6 +172,7 @@ namespace BoostTcpEndpoint
         }
         void _updateConnections()
         {
+            //По таймеру проверяем трафик на соединениях
             if (m_connections.size() > 0)
             {
                 auto it = m_connections.begin();
@@ -173,7 +183,7 @@ namespace BoostTcpEndpoint
                     {
                         it = m_connections.erase(it);
                     }
-                    else 
+                    else
                     {
                         std::lock_guard<decltype(m_connectionsMapMutex)> lock(m_connectionsMapMutex);
                         it->second->pullBuffer();
@@ -192,8 +202,11 @@ namespace BoostTcpEndpoint
 
         std::mutex m_connectionsMapMutex;
         std::map<uint32_t, std::shared_ptr<TcpConnection>> m_connections;
+
+        //Для создания новых уникальных id
         uint32_t m_lastId = 1;
-        
+
+        //Обработчики чтения трафика
         Handlers<std::function<void(const uint16_t id, const std::string&)>> m_readHandlers;
 
         uint16_t m_port;

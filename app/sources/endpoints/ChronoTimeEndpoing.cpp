@@ -22,11 +22,13 @@ public:
         std::time_t now = m_timeGetter();
         std::time_t gmtNow = std::mktime(std::gmtime(&now));
         auto chronoTimeInGmt = std::chrono::system_clock::from_time_t(gmtNow);
+        //Удалить служебные символы, например \n
         timeZone.erase(std::remove_if(timeZone.begin(), timeZone.end(),
             [](auto const& c) -> bool 
             { 
                 return !std::isalnum(c); 
             }), timeZone.end());
+        //Привести все буквы в верхний регистр
         std::string timeZoneUpper = _toUpper(timeZone);
         std::cout << "Trying " << timeZoneUpper << std::endl;
         try
